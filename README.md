@@ -1,0 +1,2 @@
+# email-helper
+Categorize emails
