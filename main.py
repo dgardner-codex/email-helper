@@ -16,6 +16,7 @@ from validation import (
 
 
 def run(input_json_file: str) -> Path:
+    _trace("-------------------------") # run separator
     _trace("startup")
     print("Starting labeling run...")
 
@@ -50,8 +51,7 @@ def run(input_json_file: str) -> Path:
     return output_path
 
 
-def main(argv: list[str]) -> int:
-    
+def main() -> int:
     parser = argparse.ArgumentParser(
         description="Email labeling CLI application."
     )
@@ -66,8 +66,8 @@ def main(argv: list[str]) -> int:
     try:
         run(args.input_file)
     except Exception as exc:
-        _trace(f"error: {exc}")
-        print(f"Error: {exc}")
+        _trace("Error:\n" + traceback.format_exc())
+        print(f"Error: {exc}\nSee trace.txt for details.")
         return 1
         
     return 0
