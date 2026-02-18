@@ -1,7 +1,5 @@
 """Best-effort append-only tracing utilities."""
 
-from __future__ import annotations
-
 from datetime import datetime, timezone
 
 from Constants import TRACE_FILE

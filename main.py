@@ -1,8 +1,7 @@
 """CLI entrypoint for deterministic scaffold."""
 
-from __future__ import annotations
-
 import sys
+import argparse
 from pathlib import Path
 
 from Constants import CATEGORIES_FILE
@@ -52,18 +51,27 @@ def run(input_json_file: str) -> Path:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print("Usage: python main.py <input_json_file>")
-        return 1
+    
+    parser = argparse.ArgumentParser(
+        description="Email labeling CLI application."
+    )
+
+    parser.add_argument(
+        "input_file",
+        help="Path to input JSON file containing unsolved emails.",
+    )
+
+    args = parser.parse_args()
 
     try:
-        run(argv[1])
+        run(args.input_file)
     except Exception as exc:
         _trace(f"error: {exc}")
         print(f"Error: {exc}")
         return 1
+        
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))
+    raise SystemExit(main())
