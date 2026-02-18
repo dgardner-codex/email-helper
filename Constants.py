@@ -1,4 +1,4 @@
-"""Project constants for Phase 1 scaffold."""
+"""Project constants (Phase 1 scaffold + Phase 1B heuristics)."""
 
 from pathlib import Path
 
