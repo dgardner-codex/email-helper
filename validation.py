@@ -1,7 +1,5 @@
 """Validation functions for scaffold phase."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from Constants import ALLOWED_MUTABLE_FIELDS, REQUIRED_EMAIL_FIELDS
