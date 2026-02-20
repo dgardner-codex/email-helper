@@ -166,5 +166,13 @@ Escalation (future OpenAI phase):
 ## Delivery phases
 
 1. **Phase 1**: deterministic-only baseline (no API dependency).
-2. **Phase 2**: add OpenAI escalation for low-confidence paths.
-3. **Phase 3**: refine scoring, prompts, and trace quality using feedback.
+2. **Phase 1C**: improve deterministic accuracy by learning from `samples.json` (e.g., sender/domain mapping) and modest tokenization/caching improvements; still no OpenAI usage.
+3. **Phase 2A**: add embeddings-based similarity classification (kNN over embedded sample emails) using `samples.json` as the labeled reference set; use thresholds to produce a confidence signal; still no freeform LLM reasoning.
+4. **Phase 2B**: add OpenAI LLM escalation ONLY for residual low-confidence cases:
+   - category disambiguation
+   - junk adjudication when uncertain
+   - reply-needed inference when uncertain
+   Enforce strict JSON outputs and validate category against `categories.json`. Preserve deterministic fallbacks (Junk override; Archive fallback).
+5. **Phase 3**: refine thresholds/scoring, embedding parameters, and prompt/tracing quality using feedback and test outcomes.
+
+This sequence prioritizes deterministic wins first to establish predictable, low-cost baseline behavior and clear guardrails. Embeddings come next to improve semantic generalization from `samples.json` without introducing freeform reasoning. LLM escalation is delayed until only the remaining ambiguous cases, which controls cost and reduces unnecessary model dependency. Keeping refinement in Phase 3 ensures threshold tuning and quality improvements are grounded in measured outcomes.
