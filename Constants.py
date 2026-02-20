@@ -4,6 +4,7 @@ from pathlib import Path
 
 CATEGORIES_FILE = Path("categories.json")
 TRACE_FILE = Path("trace.txt")
+SAMPLES_PATH = "samples.json"
 ALLOWED_MUTABLE_FIELDS = {"category", "priority"}
 REQUIRED_EMAIL_FIELDS = ("date", "from", "subject", "priority", "category", "body")
 PLACEHOLDER_CATEGORY = "Archive"
@@ -24,3 +25,7 @@ W_SUBJECT = 2
 W_BODY = 1
 
 LINK_DENSITY_THRESHOLD = 3
+
+MIN_FROM_HITS = 1
+MIN_DOMAIN_HITS = 2
+MIN_DOMAIN_RATIO = 0.6
