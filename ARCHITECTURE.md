@@ -4,21 +4,21 @@
 
 This project is a command-line Python 3.12 application that classifies inbound emails into one of the pre-defined categories from `categories.json`, assigns a priority (`high` or `normal`), and writes the solved dataset as a new JSON file.
 
-At a high level, the system is a deterministic orchestration layer around an LLM-assisted classification core:
+At a high level, the system is a deterministic + sample-learned + embeddings-assisted classifier, with LLM usage reserved for later low-confidence escalation:
 
 1. Load static reference data (categories and optional solved samples).
 2. Load an input JSON file of unsolved emails (`category == ""`, `priority == ""`).
 3. For each email, run a classification pipeline:
-   - Determine likely category.
-   - Detect junk likelihood.
-   - Determine reply-needed likelihood and therefore priority.
+   - Apply deterministic heuristics and learned sender/domain signals derived from `samples.json` (Phase 1C).
+   - Use embeddings + kNN similarity classification against solved samples when needed (Phase 2A).
+   - Escalate only low-confidence residuals to LLM adjudication (Phase 2B).
    - Apply guardrails/fallbacks so every email is solved.
 4. Persist output JSON with only `category` and `priority` modified.
 5. Emit human-readable trace logs (`trace.txt`) and console progress prints.
 
 Design goals:
 
-- **Accuracy with explainability**: LLM decisions are traceable in human-readable logs.
+- **Accuracy with explainability**: heuristic, learned, embedding-neighbor, and (future) LLM decisions are traceable in human-readable logs.
 - **Deterministic boundaries**: output values restricted to approved categories and priorities.
 - **Completion guarantee**: every input email receives a final category and priority.
 - **Simplicity**: functional design, no unnecessary abstraction.
@@ -79,11 +79,21 @@ Responsibilities:
 - Merge decisions into a final deterministic label set.
 - Apply fallback to `Archive` for non-junk uncategorized mail.
 
-### `openai_client.py` (LLM interaction wrapper)
+Classifier logic includes phased signal layers: Phase 1C sample-derived lookup maps (for sender/from/domain-to-category priors), then Phase 2A embeddings similarity scoring that yields `(category, confidence, neighbors)` for downstream guardrail checks.
+
+### `embedding utilities / index` (conceptual module; Phase 2A)
 
 Responsibilities:
 
-- Manage OpenAI API calls with a stable interface for the rest of the app.
+- Generate embeddings for solved samples and inbound emails.
+- Maintain a cached/persisted embedding index to avoid full recomputation.
+- Perform kNN similarity retrieval and return top-k neighbors with confidence-oriented metadata.
+
+### `openai_client.py` (LLM interaction wrapper; Phase 2B)
+
+Responsibilities:
+
+- Manage OpenAI API calls with a stable interface for the rest of the app once Phase 2B escalation is enabled.
 - Build request payloads using prompt templates/constants.
 - Parse model responses into structured decisions.
 - Handle retry/backoff for transient API failures.
@@ -118,16 +128,19 @@ For each email record:
    - Coerce missing fields to safe empty strings.
    - Build a compact classification context from `from`, `subject`, and `body`.
 
-2. **Candidate category assessment**
-   - Use deterministic heuristics first (exact sender/domain/category name cues).
-   - If confidence is insufficient, call OpenAI to pick the best valid category.
+2. **Junk assessment**
+   - Run deterministic spam/promotional/scam heuristics first.
+   - Use LLM junk adjudication only for uncertain cases (Phase 2B).
 
-3. **Junk assessment**
-   - Evaluate if email is likely spam/promotional/scam/irrelevant.
-   - Junk decision can come from heuristic shortcut or OpenAI adjudication.
+3. **Category decision**
+   - Apply learned sender/from/domain lookup signals derived from solved samples (Phase 1C).
+   - Apply heuristic match-and-score logic (Phase 1B baseline).
+   - Apply embeddings kNN similarity vs. solved samples and read `(category, confidence, neighbors)` (Phase 2A).
+   - Escalate to LLM category disambiguation only if still low-confidence (Phase 2B).
 
 4. **Priority assessment**
-   - Determine whether the email likely requires a response.
+   - Determine whether the email likely requires a response using heuristics first.
+   - Escalate to LLM only when heuristics are uncertain (Phase 2B).
    - Map response-needed to priority (`high` for needs response, else `normal`).
 
 5. **Resolution guardrails**
@@ -149,9 +162,15 @@ For each email record:
 
 ## 4) Decision Points for OpenAI API Usage
 
-OpenAI should be used deliberately at specific uncertainty points rather than for every branch.
+OpenAI usage is a Phase 2B capability only, triggered after deterministic, sample-learned, and embeddings-based paths are exhausted or uncertain.
 
-### Primary API decision points
+### Phase 2A embeddings path (non-LLM)
+
+- Generate and persist embeddings for solved samples, and generate embeddings for each inbound email.
+- Run kNN similarity search over the sample embedding index, then threshold confidence to produce candidate category decisions.
+- Cache/persist embeddings and index artifacts to avoid repeated recomputation across runs.
+
+### Phase 2B primary API decision points
 
 1. **Category disambiguation**
    - Trigger when deterministic rule matching yields low confidence or conflicts.
@@ -169,10 +188,12 @@ OpenAI should be used deliberately at specific uncertainty points rather than fo
 ### API guardrails
 
 - Never trust free-form category strings; validate against approved categories.
+- Validate final categories strictly against `categories.json` for both embeddings-derived and LLM-derived decisions.
 - Apply deterministic fallback when model output is invalid/empty.
 - Prefer lower temperature for consistency.
 - Include concise, schema-oriented prompts to reduce parsing ambiguity.
 - Record request intent and parsed result in trace logs (without leaking secrets).
+- When embeddings are used, trace top-k nearest-neighbor rationale alongside the chosen category/confidence.
 
 ### Failure handling at API boundaries
 
