@@ -4,7 +4,7 @@
     "from": "contact@warmnesthome.com",
     "subject": "Not just a trend... Here's why",
     "priority": "normal",
-    "category": "junk",
+    "category": "Junk",
     "body": "Congratulations! You’re pre-approved for a personal loan up to $25,000 – and you may qualify for even more with additional credit review! With our great rates, it’s the perfect time to get the financing you need with an M&T Unsecured Personal Loan.\n\nDon’t miss out on our great rates from 7.99% to 13.69% APR. Use our loan calculator at mtb.com/loanrate to estimate your rate and payment.\n\n•\tQuick approval process – get a decision in as little as 24 hours\n•\tNo application, origination or prepayment penalty fees\n•\tNo collateral required\n\nTake advantage of this limited‑time offer!\n\nApply now!"
   },
   {
@@ -12,7 +12,7 @@
     "from": "notifications@petdesk.com",
     "subject": "We will be closing at NOON this Saturday, February 14th",
     "priority": "normal",
-    "category": "archive",
+    "category": "Archive",
     "body": "Dear Cat's Corner Family,\n\nOur office will be closing at NOON this Saturday, February 14th. Please plan your cat's medication and prescription food pickups accordingly.\n\nFurthermore, we will not have a veterinarian on duty to see patients. If your cat experiences a medical emergency, please contact one of the area's Emergency Veterinary Hospitals.\n\nSincerely,\nCat's Corner Veterinary Hospital"
   },
   {
@@ -36,7 +36,7 @@
     "from": "consultants@apex.com",
     "subject": "We got your inquiry",
     "priority": "high",
-    "category": "phyllis",
+    "category": "Phyllis",
     "body": "Dear David,\n \nIf performance isn't the thing there are plenty of conferences out there. I can give you some pointers on how to locate them. You can choose something close to home or in a different region. Topics run the gamut.\n\nAs for graphs, actually a very good friend of mine from Apple Labs was a leader in something called Conceptual Graphs. My recollection of this field is it focuses on the modeling of information in graphs (edges and nodes) so that it can be applied to AI systems.  This was developed in the 70s and 80s originally by a guy named Sowa. Perhaps you want to look into it. \n\nMy friend led the annual conference in this area till his passing a few years back. You can search on his name - William Tepfenhart. I also notice that there are current references in this field including 2025 related to applying CGs to AI and LLMs etc.\n\nLet me know if you want to talk with William.\n\nBest,\nPhyllis"
   },
   {
@@ -60,7 +60,7 @@
     "from": "jjrnk@np01-45-jfkla.ru",
     "subject": "Urgent!",
     "priority": "normal",
-    "category": "junk",
+    "category": "Junk",
     "body": "Call me!  The matter is urgent!\n\n1-866-892--9201"
   },
   {
@@ -70,6 +70,38 @@
     "priority": "high",
     "category": "Netflix",
     "body": "Hi David,\n\nThe cost of your plan has changed. This change takes effect Monday, April 4th, 2026. You must confirm your updated membership details by visiting your Account by March 15th, 2026.\n\nWe hope you’re enjoying Netflix, and we're always adding new TV shows and movies for our members to enjoy.\n\nWe're here to help if you need it. Visit the Help Center for more info or contact us.\n\n–The Netflix Team"
+  },
+  {
+    "date": "02/27/2026",
+    "from": "pay@paysystems.com",
+    "subject": "You paid Abe $10",
+    "priority": "normal",
+    "category": "Venmo",
+    "body": "You paid Abe $10 on 303/01/2026\n\n–Venmo\n\nFor any issues, including the recipient not receiving funds, please contact us at Help Center at help.venmo.com or call 1-855-812-4430.\n\nThis payment will be reviewed for compliance with our User Agreement and if we determine that there is a violation by either party, it may be reversed or your ability to transfer to your bank account may be restricted."
+  },
+  {
+    "date": "02/27/2026",
+    "from": "store+50788368575@m.shopifyemail.com",
+    "subject": "Kindness tastes better with cookies",
+    "priority": "normal",
+    "category": "Junk",
+    "body": "Hey David,\nRandom Acts of Kindness Day may have been earlier this week, but honestly, kindness doesn’t belong to just one date on the calendar\n\nSometimes the smallest gesture can turn someone’s entire day around.\n\nA surprise delivery.\nA sweet “thinking of you.”\nA box of cookies arriving when they least expect it\n\nBecause kindness tastes better with cookies.\n\nThis week, consider sending a little sweetness to:\n\nA coworker who’s been going the extra mile\nA neighbor who always helps out\nA teacher who deserves a thank-you\nA friend who could use a pick-me-up\n\nNo big announcement or special occasion required.\n\nJust a simple reminder that someone’s appreciated.\n\nAnd if you’re waiting for a sign to brighten someone’s day, this is it!"
+  },
+  {
+    "date": "02/27/2026",
+    "from": "dan@tldrnewsletter.com",
+    "subject": "Gemini 3.1 Pro",
+    "priority": "normal",
+    "category": "TLDR",
+    "body": "TLDR AI 2026-02-20\n\nWatch Pliny the Liberator probe LLM vulnerabilities onstage (Sponsor)\n\nPliny the Liberator is AI's most notorious jailbreak researcher, known for turning “harmless” LLMs into offensive tools. \n\nThis April at the SANS AI Cybersecurity Summit in Arlington, VA, Pliny will appear masked while probing model vulnerabilities on the frontier of offensive AI.\n\n\nManage your subscriptions to our other newsletters on tech, startups, and programming. Or if TLDR AI isn't for you, please unsubscribe"
+  },
+  {
+    "date": "02/27/2026",
+    "from": "dan@tldrnewsletter.com",
+    "subject": "Claude Sonnet 4.6",
+    "priority": "normal",
+    "category": "TLDR",
+    "body": "TLDR Dev 2026-02-20\n\nTLDR Dev 2026-02-18\n\nKiss bugs goodbye with fully automated end-to-end test coverage (Sponsor)\n\nBugs sneak out when less than 80% of user flows are tested before shipping. But getting that kind of coverage—and staying there—is hard and pricey for any size team.\n\nQA Wolf's AI-native service supports web and mobile apps, delivering 80% automated test coverage in weeks and helping teams ship 5x faster by reducing QA cycles to minutes.\n\nSchedule a demo to learn more"
   },
   {
     "date": "02/27/2026",
