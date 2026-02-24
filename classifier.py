@@ -222,43 +222,7 @@ def load_samples_map(
     if not isinstance(records, list):
         _trace(f"samples warning: expected list in {path}; fallback to heuristics-only")
         return {}, {}
-
-    category_counts_by_domain: dict[str, dict[str, int]] = {}
-    category_counts_by_from: dict[str, dict[str, int]] = {}
-
-    for record in records:
-        if not isinstance(record, dict):
-            continue
-
-        category = str(record.get("category", "")).strip()
-        if not _is_learnable_category(category, categories):
-            continue
-
-        from_field = str(record.get("from", ""))
-        sender_email = extract_sender_email(from_field)
-        sender_domain = extract_domain(sender_email)
-
-        if sender_email:
-            by_from = category_counts_by_from.setdefault(sender_email, {})
-            by_from[category] = by_from.get(category, 0) + 1
-
-        if sender_domain:
-            by_domain = category_counts_by_domain.setdefault(sender_domain, {})
-            by_domain[category] = by_domain.get(category, 0) + 1
-
-    from_map: dict[str, tuple[str, int]] = {}
-    for sender_email, by_category in category_counts_by_from.items():
-        top_category, top_count = max(by_category.items(), key=lambda item: (item[1], item[0]))
-        from_map[sender_email] = (top_category, top_count)
-
-    domain_map: dict[str, tuple[str, float, int]] = {}
-    for sender_domain, by_category in category_counts_by_domain.items():
-        total_count = sum(by_category.values())
-        top_category, top_count = max(by_category.items(), key=lambda item: (item[1], item[0]))
-        ratio = (top_count / total_count) if total_count else 0.0
-        domain_map[sender_domain] = (top_category, ratio, total_count)
-
-    return domain_map, from_map
+    return _build_maps_from_sample_records(records, categories)
 
 
 def _load_learned_maps(
@@ -286,6 +250,7 @@ def _build_maps_from_sample_records(
     categories: list[str],
 ) -> tuple[dict[str, tuple[str, float, int]], dict[str, tuple[str, int]]]:
     if not isinstance(records, list):
+        _trace("samples warning: provided samples are not a list; fallback to heuristics-only")
         return {}, {}
 
     category_counts_by_domain: dict[str, dict[str, int]] = {}
