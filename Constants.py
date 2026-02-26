@@ -1,4 +1,4 @@
-"""Project constants (Phase 1 scaffold + Phase 1B heuristics)."""
+"""Project constants (Phase 2A embeddings + kNN)."""
 
 from pathlib import Path
 
@@ -29,3 +29,13 @@ LINK_DENSITY_THRESHOLD = 3
 MIN_FROM_HITS = 1
 MIN_DOMAIN_HITS = 2
 MIN_DOMAIN_RATIO = 0.6
+
+SAMPLE_EMBED_CACHE_PATH = ".cache/samples_embeddings.json"
+EMBED_MODEL_NAME = "text-embedding-3-small"
+EMBED_BODY_SNIPPET_CHARS = 500
+K_NEIGHBORS = 5
+MIN_EMBED_SIMILARITY = 0.80
+MIN_EMBED_SIM_MARGIN = 0.05
+MIN_KNN_TOPCAT_WEIGHT = 0.65
+MAX_EMBED_BATCH = 64
+REQUEST_TIMEOUT_SECS = 30

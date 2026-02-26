@@ -1,19 +1,26 @@
-"""Deterministic heuristic classifier for Phase 1B."""
+"""Deterministic + embedding kNN classifier for Phase 2A."""
 
 from typing import Any
+import os
 from pathlib import Path
 import json
 import re
+from math import sqrt
 
 from Constants import (
     ALLOWED_PRIORITIES,
     BODY_SNIPPET_CHARS,
+    EMBED_BODY_SNIPPET_CHARS,
+    K_NEIGHBORS,
     LINK_DENSITY_THRESHOLD,
     MIN_CATEGORY_MARGIN,
     MIN_CATEGORY_SCORE,
     MIN_DOMAIN_HITS,
     MIN_DOMAIN_RATIO,
+    MIN_EMBED_SIMILARITY,
+    MIN_EMBED_SIM_MARGIN,
     MIN_FROM_HITS,
+    MIN_KNN_TOPCAT_WEIGHT,
     OPERATIONAL_CATEGORIES_TO_SKIP,
     SAMPLES_PATH,
     SPECIAL_CATEGORY_ARCHIVE,
@@ -23,6 +30,8 @@ from Constants import (
     W_FROM,
     W_SUBJECT,
 )
+from embeddings_index import build_or_load_samples_index
+from openai_embeddings import EmbeddingError, embed_texts
 from trace import _trace
 
 PROMOTIONAL_WORDS = (
@@ -204,6 +213,50 @@ def _is_learnable_category(category: str, categories: list[str]) -> bool:
     return True
 
 
+def _empty_meta() -> dict[str, str]:
+    return {
+        "method": "",
+        "confidence": "low",
+        "reason": "",
+        "top_candidates": "",
+        "heur_best_score": "",
+        "heur_second_score": "",
+        "heur_margin": "",
+        "heur_best_category": "",
+        "heur_second_category": "",
+        "emb_top_similarity": "",
+        "emb_second_similarity": "",
+        "emb_sim_margin": "",
+        "emb_knn_topcat_weight": "",
+        "emb_top_category": "",
+        "emb_second_category": "",
+        "emb_neighbors": "",
+        "override_type": "",
+        "override_key": "",
+        "override_stats": "",
+    }
+
+
+def _canonical_embed_text(email: dict[str, str]) -> str:
+    body = email.get("body", "")[:EMBED_BODY_SNIPPET_CHARS]
+    return f"FROM: {email.get('from', '')}\nSUBJECT: {email.get('subject', '')}\nBODY: {body}"
+
+
+def _normalize(vector: list[float]) -> list[float] | None:
+    norm = sqrt(sum(value * value for value in vector))
+    if norm == 0:
+        return None
+    return [value / norm for value in vector]
+
+
+def _dot(left: list[float], right: list[float]) -> float:
+    return sum(a * b for a, b in zip(left, right))
+
+
+def _format_neighbors(neighbors: list[tuple[str, float]], limit: int = 5) -> str:
+    return ", ".join(f"{category}:{sim:.2f}" for category, sim in neighbors[:limit])
+
+
 def load_samples_map(
     samples_path: Path | str,
     categories: list[str],
@@ -290,78 +343,115 @@ def _build_maps_from_sample_records(
     return domain_map, from_map
 
 
-def label_email(
+def _attempt_embedding_knn(
     email: dict[str, str],
     categories: list[str],
-    samples: Any = None,
-) -> tuple[str, str, dict[str, str]]:
-    _validate_required_categories(categories)
+    meta: dict[str, str],
+) -> tuple[str, str] | None:
+    if not os.getenv("OPENAI_API_KEY", "").strip():
+        _trace("embeddings attempted: no (missing OPENAI_API_KEY)")
+        return None
 
-    sender_display, sender_email, sender_domain, sender_token_joined = _extract_sender_parts(email["from"])
-    subject = email["subject"].lower()
-    body_snippet = email["body"][:BODY_SNIPPET_CHARS].lower()
+    _trace("embeddings attempted: yes")
+    try:
+        sample_index = build_or_load_samples_index(categories)
+        if not sample_index:
+            raise EmbeddingError("samples index empty")
 
-    is_junk, junk_reason = _is_junk(subject, body_snippet)
-    _trace(f"junk decision: {is_junk} ({junk_reason})")
+        vectors = embed_texts([_canonical_embed_text(email)])
+        normalized_email = _normalize(vectors[0])
+        if normalized_email is None:
+            raise EmbeddingError("email embedding has zero norm")
+    except EmbeddingError as exc:
+        _trace(f"embeddings error: {exc}")
+        meta["reason"] = f"embedding_failure: {exc}"
+        return None
 
-    if is_junk:
-        _trace("top candidates: Junk override")
-        _trace("final category: Junk (high-confidence override)")
-        _trace("priority decision: normal (junk override)")
-        return (
-            SPECIAL_CATEGORY_JUNK,
-            "normal",
+    scored: list[dict[str, Any]] = []
+    for sample in sample_index:
+        sample_vector = sample.get("embedding")
+        if not isinstance(sample_vector, list):
+            continue
+        similarity = _dot(normalized_email, sample_vector)
+        scored.append(
             {
-                "method": "heuristic",
-                "confidence": "high",
-                "reason": junk_reason,
-                "top_candidates": f"{SPECIAL_CATEGORY_JUNK}:override",
-            },
+                "category": str(sample.get("category", "")),
+                "priority": str(sample.get("priority", "normal")),
+                "similarity": similarity,
+            }
         )
 
-    domain_map, from_map = _load_learned_maps(categories, samples)
+    scored.sort(key=lambda item: float(item["similarity"]), reverse=True)
+    neighbors = scored[:K_NEIGHBORS]
+    if not neighbors:
+        _trace("embeddings rejected: emb_reject: top_sim")
+        return None
 
-    from_match = from_map.get(sender_email)
-    if from_match is not None:
-        learned_category, hit_count = from_match
-        if hit_count >= MIN_FROM_HITS:
-            priority, priority_reason = _priority_for_email(subject, body_snippet)
-            _trace(f"learned from-override: {sender_email} -> {learned_category} (hits={hit_count})")
-            _trace(f"final category: {learned_category} (from-override)")
-            _trace(f"priority decision: {priority} ({priority_reason})")
-            return (
-                learned_category,
-                priority,
-                {
-                    "method": "heuristic+learned_from",
-                    "confidence": "high",
-                    "reason": f"from-override ({sender_email}, hits={hit_count})",
-                    "top_candidates": "",
-                },
-            )
+    category_weights: dict[str, float] = {}
+    priority_weights: dict[str, float] = {}
+    for item in neighbors:
+        similarity = float(item["similarity"])
+        category = str(item["category"])
+        priority = str(item["priority"])
+        category_weights[category] = category_weights.get(category, 0.0) + similarity
+        priority_weights[priority] = priority_weights.get(priority, 0.0) + similarity
 
-    domain_match = domain_map.get(sender_domain)
-    if domain_match is not None:
-        learned_category, ratio, total_count = domain_match
-        if total_count >= MIN_DOMAIN_HITS and ratio >= MIN_DOMAIN_RATIO:
-            priority, priority_reason = _priority_for_email(subject, body_snippet)
-            _trace(
-                f"learned domain-override: {sender_domain} -> {learned_category} "
-                f"(hits={total_count}, ratio={ratio:.2f})"
-            )
-            _trace(f"final category: {learned_category} (domain-override)")
-            _trace(f"priority decision: {priority} ({priority_reason})")
-            return (
-                learned_category,
-                priority,
-                {
-                    "method": "heuristic+learned_from",
-                    "confidence": "high",
-                    "reason": f"domain-override ({sender_domain}, hits={total_count}, ratio={ratio:.2f})",
-                    "top_candidates": "",
-                },
-            )
+    sorted_cat = sorted(category_weights.items(), key=lambda item: (item[1], item[0]), reverse=True)
+    sorted_pri = sorted(priority_weights.items(), key=lambda item: (item[1], item[0]), reverse=True)
 
+    top_category, top_cat_weight = sorted_cat[0]
+    second_category = sorted_cat[1][0] if len(sorted_cat) > 1 else ""
+    top_priority = sorted_pri[0][0]
+
+    top_similarity = float(neighbors[0]["similarity"])
+    second_similarity = float(neighbors[1]["similarity"]) if len(neighbors) > 1 else 0.0
+    sim_margin = top_similarity - second_similarity
+    total_weight = sum(category_weights.values())
+    topcat_weight = (top_cat_weight / total_weight) if total_weight > 0 else 0.0
+
+    meta["emb_top_similarity"] = f"{top_similarity:.4f}"
+    meta["emb_second_similarity"] = f"{second_similarity:.4f}"
+    meta["emb_sim_margin"] = f"{sim_margin:.4f}"
+    meta["emb_knn_topcat_weight"] = f"{topcat_weight:.4f}"
+    meta["emb_top_category"] = top_category
+    meta["emb_second_category"] = second_category
+    meta["emb_neighbors"] = _format_neighbors([(str(item["category"]), float(item["similarity"])) for item in neighbors])
+
+    top_three = _format_neighbors([(str(item["category"]), float(item["similarity"])) for item in neighbors], limit=3)
+    _trace(f"embeddings top3 neighbors: {top_three}")
+
+    rejects: list[str] = []
+    allowed_categories = set(categories)
+    if top_category not in allowed_categories:
+        rejects.append("emb_reject: unknown_category")
+    if top_similarity < MIN_EMBED_SIMILARITY:
+        rejects.append("emb_reject: top_sim")
+    if sim_margin < MIN_EMBED_SIM_MARGIN:
+        rejects.append("emb_reject: margin")
+    if topcat_weight < MIN_KNN_TOPCAT_WEIGHT:
+        rejects.append("emb_reject: topcat_weight")
+
+    if rejects:
+        _trace(f"embeddings rejected: {'; '.join(rejects)}")
+        return None
+
+    if top_priority not in ALLOWED_PRIORITIES:
+        top_priority = "normal"
+    _trace(f"embeddings accepted: category={top_category} priority={top_priority}")
+    return top_category, top_priority
+
+
+def _heuristic_fallback(
+    categories: list[str],
+    sender_display: str,
+    sender_email: str,
+    sender_domain: str,
+    sender_token_joined: str,
+    subject: str,
+    body_snippet: str,
+    meta: dict[str, str],
+    embed_failed: bool,
+) -> tuple[str, str, dict[str, str]]:
     scored = [
         (
             category,
@@ -384,10 +474,12 @@ def label_email(
     best_category = SPECIAL_CATEGORY_ARCHIVE
     best_score = 0
     second_best_score = 0
+    second_best_category = ""
 
     if scored:
         best_category, best_score = scored[0]
-        second_best_score = scored[1][1] if len(scored) > 1 else 0
+        if len(scored) > 1:
+            second_best_category, second_best_score = scored[1]
 
     low_confidence = (
         best_score < MIN_CATEGORY_SCORE
@@ -412,17 +504,109 @@ def label_email(
     if priority not in ALLOWED_PRIORITIES:
         raise ValueError(f"Classifier selected invalid priority: {priority}")
 
+    meta["method"] = "fallback_heuristic_due_to_embed_failure" if embed_failed else "heuristic"
+    meta["confidence"] = confidence
+    meta["reason"] = reason
+    meta["top_candidates"] = top_summary
+    meta["heur_best_score"] = str(best_score)
+    meta["heur_second_score"] = str(second_best_score)
+    meta["heur_margin"] = str(best_score - second_best_score)
+    meta["heur_best_category"] = best_category
+    meta["heur_second_category"] = second_best_category
+
     _trace(f"top candidates: {top_summary}")
     _trace(f"final category: {selected_category} ({reason})")
     _trace(f"priority decision: {priority} ({priority_reason})")
+    _trace(f"method: {meta['method']}")
+    return selected_category, priority, meta
 
-    return (
-        selected_category,
-        priority,
-        {
-            "method": "heuristic",
-            "confidence": confidence,
-            "reason": reason,
-            "top_candidates": top_summary,
-        },
+
+def label_email(
+    email: dict[str, str],
+    categories: list[str],
+    samples: Any = None,
+) -> tuple[str, str, dict[str, str]]:
+    _validate_required_categories(categories)
+
+    sender_display, sender_email, sender_domain, sender_token_joined = _extract_sender_parts(email["from"])
+    subject = email["subject"].lower()
+    body_snippet = email["body"][:BODY_SNIPPET_CHARS].lower()
+    meta = _empty_meta()
+
+    is_junk, junk_reason = _is_junk(subject, body_snippet)
+    _trace(f"junk decision: {is_junk} ({junk_reason})")
+
+    if is_junk:
+        _trace("top candidates: Junk override")
+        _trace("final category: Junk (high-confidence override)")
+        _trace("priority decision: normal (junk override)")
+        _trace("method: junk_override")
+        meta["method"] = "junk_override"
+        meta["confidence"] = "high"
+        meta["reason"] = junk_reason
+        meta["top_candidates"] = f"{SPECIAL_CATEGORY_JUNK}:override"
+        return SPECIAL_CATEGORY_JUNK, "normal", meta
+
+    domain_map, from_map = _load_learned_maps(categories, samples)
+
+    from_match = from_map.get(sender_email)
+    if from_match is not None:
+        learned_category, hit_count = from_match
+        if hit_count >= MIN_FROM_HITS:
+            priority, priority_reason = _priority_for_email(subject, body_snippet)
+            _trace(f"learned from-override: {sender_email} -> {learned_category} (hits={hit_count})")
+            _trace(f"final category: {learned_category} (from-override)")
+            _trace(f"priority decision: {priority} ({priority_reason})")
+            _trace("method: learned_from")
+            meta["method"] = "learned_from"
+            meta["confidence"] = "high"
+            meta["reason"] = f"from-override ({sender_email}, hits={hit_count})"
+            meta["override_type"] = "from"
+            meta["override_key"] = sender_email
+            meta["override_stats"] = f"hits={hit_count}"
+            return learned_category, priority, meta
+
+    domain_match = domain_map.get(sender_domain)
+    if domain_match is not None:
+        learned_category, ratio, total_count = domain_match
+        if total_count >= MIN_DOMAIN_HITS and ratio >= MIN_DOMAIN_RATIO:
+            priority, priority_reason = _priority_for_email(subject, body_snippet)
+            _trace(
+                f"learned domain-override: {sender_domain} -> {learned_category} "
+                f"(hits={total_count}, ratio={ratio:.2f})"
+            )
+            _trace(f"final category: {learned_category} (domain-override)")
+            _trace(f"priority decision: {priority} ({priority_reason})")
+            _trace("method: learned_from")
+            meta["method"] = "learned_from"
+            meta["confidence"] = "high"
+            meta["reason"] = f"domain-override ({sender_domain}, hits={total_count}, ratio={ratio:.2f})"
+            meta["override_type"] = "domain"
+            meta["override_key"] = sender_domain
+            meta["override_stats"] = f"hits={total_count},ratio={ratio:.2f}"
+            return learned_category, priority, meta
+
+    embed_result = _attempt_embedding_knn(email, categories, meta)
+    if embed_result is not None:
+        category, priority = embed_result
+        meta["method"] = "embedding_knn"
+        meta["confidence"] = "high"
+        meta["reason"] = "semantic nearest-neighbor match"
+        meta["top_candidates"] = meta["emb_neighbors"]
+        _trace(f"final category: {category} (embedding_knn)")
+        _trace(f"priority decision: {priority} (embedding vote)")
+        _trace("method: embedding_knn")
+        return category, priority, meta
+
+    embed_failed = meta["reason"].startswith("embedding_failure:")
+    return _heuristic_fallback(
+        categories,
+        sender_display,
+        sender_email,
+        sender_domain,
+        sender_token_joined,
+        subject,
+        body_snippet,
+        meta,
+        embed_failed,
     )
